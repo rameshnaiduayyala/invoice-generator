@@ -1,8 +1,8 @@
-import React, { useRef, useState } from 'react';
-import { Upload, PenTool } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Upload } from 'lucide-react';
 import TiptapEditor from './TiptapEditor';
 
-const InvoiceHeader = ({ logoData, setLogoData, company, setCompany, client, setClient, meta, setMeta, visible, theme }) => {
+const InvoiceHeader = ({ logoData, setLogoData, company, setCompany, client, setClient, meta, setMeta, visible, theme = { primary: '#15803d' } }) => {
   const fileInputRef = useRef(null);
 
   // --- Image Handlers ---
@@ -18,94 +18,94 @@ const InvoiceHeader = ({ logoData, setLogoData, company, setCompany, client, set
     <div className="p-8 pb-4 font-sans bg-white">
       
       {/* --- THE GREEN BORDER BOX --- */}
-      <div className="border-[3px] p-4 relative mb-6" style={{ borderColor: theme.primary }}>
+      <div className="border-[3px] p-6 relative mb-6" style={{ borderColor: theme.primary }}>
         
-        {/* Faint Background Decoration (Optional Leaf Watermark) */}
-        <div className="absolute top-0 left-0 w-32 h-32 opacity-10 pointer-events-none">
-           <svg viewBox="0 0 24 24" fill={theme.primary}><path d="M12,2C12,2 14,8 18,8C22,8 22,2 22,2C22,2 20,10 16,12C12,14 12,2 12,2M12,22C12,22 10,16 6,16C2,16 2,22 2,22C2,22 4,14 8,12C12,10 12,22 12,22Z" /></svg>
-        </div>
-
-        <div className="flex justify-between items-center relative z-10">
+        {/* Flex Column to stack Logo -> Text */}
+        <div className="flex flex-col items-center relative z-10">
           
-          {/* CENTER: COMPANY NAME & DETAILS */}
-          <div className="flex-1 text-center">
-            
-            {/* 1. Main Company Name */}
-            <div className="mb-1">
-              <TiptapEditor 
-                content={company.name || ''} 
-                onChange={(val) => setCompany({...company, name: val})} 
-                placeholder="NURSERY NAME" 
-                theme={theme}
-                className="text-4xl md:text-5xl font-black uppercase tracking-wide text-gray-800 leading-none text-center" 
-              />
-            </div>
-
-            {/* 2. Subtitle (Proprietor Name) */}
-            <div className="mb-2">
-               <TiptapEditor 
-                 content={company.tagline || ''} 
-                 onChange={(val) => setCompany({...company, tagline: val})} 
-                 placeholder="Proprietor / Subtitle..." 
-                 theme={theme}
-                 className="text-xl font-bold text-gray-600 uppercase tracking-wider text-center"
-               />
-            </div>
-
-            {/* 3. GREEN PHONE NUMBERS ROW */}
-            <div className="mb-2 border-t border-b py-1 border-gray-100">
-               <TiptapEditor 
-                 content={company.contacts?.[0]?.value || ''} 
-                 onChange={(val) => {
-                    const newContacts = [...(company.contacts || [])];
-                    if(!newContacts[0]) newContacts[0] = { id: 'phones', type: 'text', value: '' };
-                    newContacts[0].value = val;
-                    setCompany({...company, contacts: newContacts});
-                 }}
-                 placeholder="99592 00000 | 94403 00000 | 94926 00000" 
-                 theme={theme}
-                 className="text-2xl md:text-3xl font-bold text-center leading-none"
-                 // This forces the green color from your theme
-                 style={{ color: theme.primary }}
-               />
-            </div>
-
-            {/* 4. Address & Email Line */}
-            <div>
-              <TiptapEditor 
-                content={company.address || ''} 
-                onChange={(val) => setCompany({...company, address: val})} 
-                placeholder="Opp: Temple | Road Name | City | Email: example@yahoo.com" 
-                theme={theme}
-                className="text-sm font-bold text-gray-800 text-center uppercase tracking-tight" 
-              />
-            </div>
-          </div>
-
-          {/* RIGHT: LOGO (Stylized Plant) */}
+          {/* 1. LOGO (Centered at Top) */}
           {visible && (
             <div 
-              className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 flex items-center justify-center cursor-pointer group"
+              className="mb-4 w-32 h-32 flex items-center justify-center cursor-pointer group relative"
               onClick={() => fileInputRef.current.click()}
             >
               {logoData.src ? (
                 <img src={logoData.src} alt="Logo" className="w-full h-full object-contain" />
               ) : (
-                <div className="text-gray-300 text-center">
-                   <Upload size={32} className="mx-auto mb-1 opacity-20"/>
-                   <span className="text-[10px] uppercase font-bold">Logo</span>
+                <div className="text-gray-300 text-center border-2 border-dashed border-gray-200 p-4 rounded-full">
+                   <Upload size={32} className="mx-auto mb-1 opacity-50"/>
+                   <span className="text-[10px] uppercase font-bold">Upload Logo</span>
                 </div>
               )}
+              
+              {/* Hidden Input */}
               <input type="file" ref={fileInputRef} accept="image/*" onChange={(e) => handleFile(e.target.files[0])} className="hidden" />
+              
+              {/* Edit Hint */}
+              {logoData.src && (
+                 <div className="absolute -bottom-2 bg-gray-800 text-white text-[9px] px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition print:hidden">
+                   Change
+                 </div>
+              )}
             </div>
           )}
+
+          {/* 2. COMPANY NAME */}
+          <div className="w-full text-center mb-1">
+            <TiptapEditor 
+              content={company.name || ''} 
+              onChange={(val) => setCompany({...company, name: val})} 
+              placeholder="NURSERY NAME" 
+              theme={theme}
+              className="text-4xl md:text-5xl font-black uppercase tracking-wide text-gray-900 leading-none text-center" 
+            />
+          </div>
+
+          {/* 3. SUBTITLE / PROPRIETOR */}
+          <div className="w-full text-center mb-3">
+             <TiptapEditor 
+               content={company.tagline || ''} 
+               onChange={(val) => setCompany({...company, tagline: val})} 
+               placeholder="Proprietor / Subtitle..." 
+               theme={theme}
+               className="text-xl font-bold text-gray-600 uppercase tracking-wider text-center"
+             />
+          </div>
+
+          {/* 4. PHONE NUMBERS (Green Row) */}
+          <div className="w-full text-center mb-2 border-t border-b py-1 border-gray-100">
+             <TiptapEditor 
+               content={company.contacts?.[0]?.value || ''} 
+               onChange={(val) => {
+                  const newContacts = [...(company.contacts || [])];
+                  if(!newContacts[0]) newContacts[0] = { id: 'phones', type: 'text', value: '' };
+                  newContacts[0].value = val;
+                  setCompany({...company, contacts: newContacts});
+               }}
+               placeholder="99592 00000 | 94403 00000 | 94926 00000" 
+               theme={theme}
+               className="text-2xl md:text-3xl font-bold text-center leading-none"
+               style={{ color: theme.primary }}
+             />
+          </div>
+
+          {/* 5. ADDRESS */}
+          <div className="w-full text-center">
+            <TiptapEditor 
+              content={company.address || ''} 
+              onChange={(val) => setCompany({...company, address: val})} 
+              placeholder="Opp: Temple | Road Name | City | Email: example@yahoo.com" 
+              theme={theme}
+              className="text-sm font-bold text-gray-800 text-center uppercase tracking-tight" 
+            />
+          </div>
         </div>
       </div>
 
-      {/* --- REVISED QUOTATION SECTION --- */}
+      {/* --- QUOTATION INFO SECTION --- */}
       <div className="flex items-end justify-between mb-4">
         
-        {/* LEFT: TO ADDRESS */}
+        {/* To Address */}
         <div className="w-1/3">
            <span className="text-sm font-bold text-gray-800 italic block mb-1">To,</span>
            <TiptapEditor 
@@ -118,13 +118,13 @@ const InvoiceHeader = ({ logoData, setLogoData, company, setCompany, client, set
            <TiptapEditor 
               content={client.address || ''} 
               onChange={(val) => setClient({...client, address: val})} 
-              placeholder="Farmhouse / Location..." 
+              placeholder="Location..." 
               theme={theme}
               className="text-sm text-gray-600 leading-tight" 
            />
         </div>
 
-        {/* CENTER: TITLE (Underlined) */}
+        {/* Title */}
         <div className="w-1/3 text-center">
            <input 
              value={meta.title} 
@@ -134,7 +134,7 @@ const InvoiceHeader = ({ logoData, setLogoData, company, setCompany, client, set
            />
         </div>
 
-        {/* RIGHT: DATE */}
+        {/* Date */}
         <div className="w-1/3 text-right">
            <div className="inline-flex items-center gap-2">
               <span className="text-sm font-bold text-gray-800">Date :</span>
