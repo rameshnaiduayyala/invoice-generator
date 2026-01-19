@@ -5,18 +5,31 @@ import InvoiceHeader from './components/InvoiceHeader';
 import InvoiceTable from './components/InvoiceTable';
 import InvoiceFooter from './components/InvoiceFooter';
 import SettingsModal from './components/SettingsModal';
-import HistoryModal from './components/HistoryModal'; // Import New Modal
+import HistoryModal from './components/HistoryModal';
 
-// Defaults
+// --- DEFAULTS ---
 const DEFAULT_THEME = { primary: '#15803d', secondary: '#f0fdf4', text: '#1f2937', headerText: '#111827' };
 const DEFAULT_COMPANY = { name: 'Green Thumb Nursery', contacts: [], bank: '', terms: '' };
 const DEFAULT_CLIENT = { name: '', address: '' };
 const DEFAULT_META = { number: 'INV-001', date: new Date().toISOString().split('T')[0], title: 'INVOICE' };
 const DEFAULT_ITEMS = [{ id: 1, qty: 1, price: 0 }];
 
+// --- CRITICAL FIX: SMART PARSER HELPER ---
+// This prevents the "Unexpected token o in JSON" or "[object Object]" error
+const safeParse = (data, fallback) => {
+  if (!data) return fallback;
+  if (typeof data === 'object') return data; // It's already an object (Admin Mode), return as is
+  try {
+    return JSON.parse(data); // It's a string (User Draft), parse it
+  } catch (e) {
+    console.warn("Parse error for key, using fallback", e);
+    return fallback;
+  }
+};
+
 const InvoiceGenerator = ({ onLogout, saveDraft, saveFinal, fetchHistory, deleteHistory, initialData }) => {
   const [showSettings, setShowSettings] = useState(false);
-  const [showHistory, setShowHistory] = useState(false); // History Modal State
+  const [showHistory, setShowHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const invoiceRef = useRef();
 
@@ -26,61 +39,84 @@ const InvoiceGenerator = ({ onLogout, saveDraft, saveFinal, fetchHistory, delete
     pageStyle: `@page { size: A4; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } #design-toolbar, .print\\:hidden { display: none !important; } }`,
   });
 
-  // --- STATE ---
-  // If initialData exists (loaded from cloud), use it. Otherwise use DEFAULTS.
-  const [theme, setTheme] = useState(initialData?.theme ? JSON.parse(initialData.theme) : DEFAULT_THEME);
-  const [logoData, setLogoData] = useState(initialData?.logoData ? JSON.parse(initialData.logoData) : { src: null });
-  const [signature, setSignature] = useState(initialData?.signature || null);
-  const [potOptions, setPotOptions] = useState(initialData?.potOptions ? JSON.parse(initialData.potOptions) : ['4" Pot', '6" Pot', '8" Pot']);
-  const [columns, setColumns] = useState(initialData?.columns ? JSON.parse(initialData.columns) : [
+  // --- 1. STATE INITIALIZATION (Using safeParse) ---
+  const [theme, setTheme] = useState(() => safeParse(initialData?.theme, DEFAULT_THEME));
+  const [logoData, setLogoData] = useState(() => safeParse(initialData?.logoData, { src: null }));
+  const [signature, setSignature] = useState(initialData?.signature || null); // Signature is usually a raw string (dataUrl), not JSON
+  
+  const [potOptions, setPotOptions] = useState(() => safeParse(initialData?.potOptions, ['4" Pot', '6" Pot', '8" Pot']));
+  const [columns, setColumns] = useState(() => safeParse(initialData?.columns, [
     { id: 'description', label: 'Plant Name', type: 'text', width: 'w-4/12' },
     { id: 'bag', label: 'Bag Size', type: 'text', width: 'w-2/12' }, 
     { id: 'rate', label: 'Rate', type: 'number', width: 'w-2/12' }
-  ]);
-  const [visibility, setVisibility] = useState(initialData?.visibility ? JSON.parse(initialData.visibility) : { logo: true, bankDetails: true, terms: true, signature: true, tax: true });
-  const [companyDetails, setCompanyDetails] = useState(initialData?.company ? JSON.parse(initialData.company) : DEFAULT_COMPANY);
-  const [clientDetails, setClientDetails] = useState(initialData?.client ? JSON.parse(initialData.client) : DEFAULT_CLIENT);
-  const [invoiceMeta, setInvoiceMeta] = useState(initialData?.meta ? JSON.parse(initialData.meta) : DEFAULT_META);
-  const [items, setItems] = useState(initialData?.items ? JSON.parse(initialData.items) : DEFAULT_ITEMS);
-  const [extraCharges, setExtraCharges] = useState(initialData?.extraCharges ? JSON.parse(initialData.extraCharges) : []);
+  ]));
+  
+  const [visibility, setVisibility] = useState(() => safeParse(initialData?.visibility, { logo: true, bankDetails: true, terms: true, signature: true, tax: true }));
+  const [companyDetails, setCompanyDetails] = useState(() => safeParse(initialData?.company || initialData?.companyDetails, DEFAULT_COMPANY)); // Handle key naming mismatch if any
+  const [clientDetails, setClientDetails] = useState(() => safeParse(initialData?.client || initialData?.clientDetails, DEFAULT_CLIENT));
+  const [invoiceMeta, setInvoiceMeta] = useState(() => safeParse(initialData?.meta || initialData?.invoiceMeta, DEFAULT_META));
+  const [items, setItems] = useState(() => safeParse(initialData?.items, DEFAULT_ITEMS));
+  const [extraCharges, setExtraCharges] = useState(() => safeParse(initialData?.extraCharges, []));
 
-  // --- AUTO-SAVE DRAFT ---
+  // --- 2. UPDATE STATE WHEN initialData CHANGES (For Admin Loading) ---
+  useEffect(() => {
+    if (initialData) {
+      setTheme(safeParse(initialData.theme, DEFAULT_THEME));
+      setLogoData(safeParse(initialData.logoData, { src: null }));
+      setSignature(initialData.signature || null);
+      setPotOptions(safeParse(initialData.potOptions, ['4" Pot', '6" Pot', '8" Pot']));
+      setColumns(safeParse(initialData.columns, [
+        { id: 'description', label: 'Plant Name', type: 'text', width: 'w-4/12' },
+        { id: 'bag', label: 'Bag Size', type: 'text', width: 'w-2/12' }, 
+        { id: 'rate', label: 'Rate', type: 'number', width: 'w-2/12' }
+      ]));
+      setVisibility(safeParse(initialData.visibility, { logo: true, bankDetails: true, terms: true, signature: true, tax: true }));
+      setCompanyDetails(safeParse(initialData.company || initialData.companyDetails, DEFAULT_COMPANY));
+      setClientDetails(safeParse(initialData.client || initialData.clientDetails, DEFAULT_CLIENT));
+      setInvoiceMeta(safeParse(initialData.meta || initialData.invoiceMeta, DEFAULT_META));
+      setItems(safeParse(initialData.items, DEFAULT_ITEMS));
+      setExtraCharges(safeParse(initialData.extraCharges, []));
+    }
+  }, [initialData]);
+
+  // --- 3. AUTO-SAVE DRAFT ---
   useEffect(() => {
     setIsSaving(true);
     const timeoutId = setTimeout(() => {
-      saveDraft({
-        theme: JSON.stringify(theme),
-        logoData: JSON.stringify(logoData),
-        signature,
-        potOptions: JSON.stringify(potOptions),
-        columns: JSON.stringify(columns),
-        visibility: JSON.stringify(visibility),
-        company: JSON.stringify(companyDetails),
-        client: JSON.stringify(clientDetails),
-        meta: JSON.stringify(invoiceMeta),
-        items: JSON.stringify(items),
-        extraCharges: JSON.stringify(extraCharges)
-      });
+      // Only save draft if the prop function exists (Admin Mode passes an empty function)
+      if (saveDraft) {
+        saveDraft({
+          theme: JSON.stringify(theme),
+          logoData: JSON.stringify(logoData),
+          signature,
+          potOptions: JSON.stringify(potOptions),
+          columns: JSON.stringify(columns),
+          visibility: JSON.stringify(visibility),
+          company: JSON.stringify(companyDetails),
+          client: JSON.stringify(clientDetails),
+          meta: JSON.stringify(invoiceMeta),
+          items: JSON.stringify(items),
+          extraCharges: JSON.stringify(extraCharges)
+        });
+      }
       setIsSaving(false);
     }, 2000); 
     return () => clearTimeout(timeoutId);
-  }, [theme, logoData, signature, potOptions, columns, visibility, companyDetails, clientDetails, invoiceMeta, items, extraCharges]);
+  }, [theme, logoData, signature, potOptions, columns, visibility, companyDetails, clientDetails, invoiceMeta, items, extraCharges, saveDraft]);
 
   // --- HANDLER: SAVE TO HISTORY ---
   const handleSaveToHistory = () => {
-    // Calculate total amount for the summary list
     const subtotal = items.reduce((sum, item) => sum + ((item.qty || 0) * (item.price || 0)), 0);
     const tax = visibility.tax ? subtotal * 0.05 : 0;
     const extra = extraCharges.reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
     const totalAmount = subtotal + tax + extra;
 
-    // We store the full state as JSON strings, plus some extracted fields for easy searching
     const invoicePayload = {
       invoiceNo: invoiceMeta.number,
       clientName: clientDetails.name,
       date: invoiceMeta.date,
       totalAmount: totalAmount,
-      // Full Data Dump (so we can reload exactly)
+      // Full Data Dump
       fullState: JSON.stringify({
         theme, logoData, signature, potOptions, columns, visibility,
         companyDetails, clientDetails, invoiceMeta, items, extraCharges
@@ -90,7 +126,7 @@ const InvoiceGenerator = ({ onLogout, saveDraft, saveFinal, fetchHistory, delete
     saveFinal(invoicePayload);
   };
 
-  // --- HANDLER: LOAD FROM HISTORY ---
+  // --- HANDLER: LOAD FROM HISTORY (Local User) ---
   const handleLoadInvoice = (loadedInvoice) => {
     if (confirm("This will overwrite your current screen. Continue?")) {
       const data = JSON.parse(loadedInvoice.fullState);
@@ -108,21 +144,16 @@ const InvoiceGenerator = ({ onLogout, saveDraft, saveFinal, fetchHistory, delete
     }
   };
 
-  // --- HANDLER: NEW INVOICE (Clear Form) ---
   const handleNewInvoice = () => {
     if(confirm("Clear current form?")) {
       setClientDetails(DEFAULT_CLIENT);
       setItems(DEFAULT_ITEMS);
       setExtraCharges([]);
-      // We purposefully keep Company, Theme, Settings etc.
-      // We might want to auto-increment invoice number here if we were fancy
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-200 p-4 md:p-8 font-serif">
-      
-      {/* --- HISTORY MODAL --- */}
       <HistoryModal 
         isOpen={showHistory} 
         onClose={() => setShowHistory(false)}
@@ -131,30 +162,34 @@ const InvoiceGenerator = ({ onLogout, saveDraft, saveFinal, fetchHistory, delete
         onLoad={handleLoadInvoice}
       />
 
-      {/* --- TOOLBAR --- */}
+      {/* Toolbar */}
       <div className="max-w-[210mm] mx-auto mb-4 flex justify-between items-center print:hidden">
         <div className="flex items-center gap-4">
           <span className="text-xs text-gray-500 font-sans flex items-center gap-2">
              <Palette size={14} style={{ color: theme.primary }}/> Cloud Mode
           </span>
           <span className={`text-xs font-bold flex items-center gap-1 transition-colors ${isSaving ? 'text-orange-500' : 'text-green-600'}`}>
-            <Cloud size={14} /> {isSaving ? 'Draft Saving...' : 'Draft Saved'}
+            <Cloud size={14} /> {isSaving ? 'Saving...' : 'Saved'}
           </span>
         </div>
 
         <div className="flex gap-2">
-          {/* NEW Buttons */}
-          <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded shadow text-sm font-sans font-medium hover:bg-indigo-700 transition">
-             <History size={16}/> List
-          </button>
+          {/* Only show History/New/Draft logic if NOT Admin Editing Mode */}
+          {fetchHistory && (
+             <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded shadow text-sm font-sans font-medium hover:bg-indigo-700 transition">
+               <History size={16}/> History
+             </button>
+          )}
           
           <button onClick={handleSaveToHistory} className="flex items-center gap-2 bg-green-600 text-white px-3 py-2 rounded shadow text-sm font-sans font-medium hover:bg-green-700 transition">
              <Save size={16}/> Save
           </button>
 
-          <button onClick={handleNewInvoice} className="flex items-center gap-2 bg-white text-gray-700 px-3 py-2 rounded shadow text-sm font-sans font-medium hover:bg-gray-50 transition border border-gray-200" title="Clear form for new invoice">
-             <FilePlus size={16}/> New
-          </button>
+          {fetchHistory && (
+            <button onClick={handleNewInvoice} className="flex items-center gap-2 bg-white text-gray-700 px-3 py-2 rounded shadow text-sm font-sans font-medium hover:bg-gray-50 transition border border-gray-200">
+               <FilePlus size={16}/> New
+            </button>
+          )}
 
           <div className="w-px h-6 bg-gray-300 mx-2"></div>
 

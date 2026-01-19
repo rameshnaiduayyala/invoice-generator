@@ -1,111 +1,174 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, addDoc, getDocs, deleteDoc } from "firebase/firestore"; 
+import { doc, getDoc, setDoc, collection, addDoc, getDocs, deleteDoc, updateDoc } from "firebase/firestore"; 
 import { auth, db } from './firebase'; 
 import InvoiceGenerator from './InvoiceGenerator';
 import LoginPage from './components/LoginPage';
-import { Loader2 } from 'lucide-react';
+import AdminDashboard from './components/AdminDashboard';
+import { Loader2, ArrowLeft, ShieldAlert } from 'lucide-react';
 
 function App() {
   const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
   const [initialData, setInitialData] = useState(null); 
+  const [adminEditingSession, setAdminEditingSession] = useState(null); 
 
-  // 1. Auth Listener
+  // --- 1. AUTH & ROLE LISTENER ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
+      
       if (currentUser) {
-        // Load "Draft" state (current settings/theme)
-        const docRef = doc(db, "invoices", currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setInitialData(docSnap.data());
+        try {
+          // Fetch User Profile
+          const userRef = doc(db, "users", currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            console.log("Logged in as:", data.email, " | Role:", data.role); // DEBUG LOG
+            setUserData(data);
+            
+            // If NOT admin, load draft invoice
+            if (data.role !== 'admin') {
+              const invoiceRef = doc(db, "invoices", currentUser.uid);
+              const invoiceSnap = await getDoc(invoiceRef);
+              if (invoiceSnap.exists()) setInitialData(invoiceSnap.data());
+            }
+          } else {
+            // NEW USER DEFAULT: FORCE ROLE TO 'user'
+            console.log("New user detected. Creating default 'user' profile.");
+            const newProfile = { email: currentUser.email, role: 'user', nurseryName: 'New Nursery' };
+            await setDoc(userRef, newProfile);
+            setUserData(newProfile);
+          }
+          setUser(currentUser);
+        } catch (err) {
+          console.error("Auth Error:", err);
+          setUser(null);
         }
-        setUser(currentUser);
       } else {
+        // Logged Out
         setUser(null);
+        setUserData(null);
         setInitialData(null);
+        setAdminEditingSession(null);
       }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // 2. Auto-Save Draft (Keeps your current screen settings)
+  // --- HANDLERS (Keep existing handlers) ---
   const saveDraftToCloud = async (data) => {
     if (!user) return;
-    try {
-      await setDoc(doc(db, "invoices", user.uid), data);
-    } catch (e) {
-      console.error("Draft save failed:", e);
-    }
+    await setDoc(doc(db, "invoices", user.uid), data);
+    const company = JSON.parse(data.company || '{}');
+    if (company.name) await updateDoc(doc(db, "users", user.uid), { nurseryName: company.name });
   };
 
-  // 3. NEW: Save Final Invoice to History
   const saveFinalInvoice = async (invoiceData) => {
     if (!user) return;
-    try {
-      // Create a sub-collection 'history' inside the user's document
-      // This creates a permanent record separate from the draft
-      await addDoc(collection(db, "invoices", user.uid, "history"), {
-        ...invoiceData,
-        createdAt: new Date().toISOString(), // Timestamp for sorting
-        searchKey: invoiceData.clientName?.toLowerCase() || '' // Helper for searching later
-      });
-      alert("Invoice Saved to History Successfully!");
-    } catch (e) {
-      console.error("Error saving invoice:", e);
-      alert("Failed to save.");
-    }
+    await addDoc(collection(db, "invoices", user.uid, "history"), {
+      ...invoiceData,
+      createdAt: new Date().toISOString(),
+      searchKey: invoiceData.clientName?.toLowerCase() || ''
+    });
+    alert("Saved to History!");
   };
 
-  // 4. NEW: Fetch All Saved Invoices
   const fetchSavedInvoices = async () => {
     if (!user) return [];
-    try {
-      const querySnapshot = await getDocs(collection(db, "invoices", user.uid, "history"));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (e) {
-      console.error("Error fetching history:", e);
-      return [];
-    }
+    const q = await getDocs(collection(db, "invoices", user.uid, "history"));
+    return q.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   };
 
-  // 5. NEW: Delete Invoice
   const deleteInvoice = async (id) => {
-    if (!user) return;
-    if (window.confirm("Are you sure you want to delete this invoice permanently?")) {
+    if (confirm("Delete permanently?")) {
       await deleteDoc(doc(db, "invoices", user.uid, "history", id));
-      return true; // Return success
+      return true;
     }
     return false;
   };
 
+  // --- ADMIN EDITING HANDLERS ---
+  const startAdminEdit = (invoice, userId) => {
+    const fullState = JSON.parse(invoice.fullState);
+    setAdminEditingSession({ invoiceId: invoice.id, userId: userId, data: fullState });
+  };
+
+  const saveAdminEdit = async (invoiceData) => {
+    if (!adminEditingSession) return;
+    const { userId, invoiceId } = adminEditingSession;
+    try {
+      const invoiceRef = doc(db, "invoices", userId, "history", invoiceId);
+      await updateDoc(invoiceRef, { ...invoiceData });
+      alert("User invoice updated!");
+      setAdminEditingSession(null);
+    } catch (e) { alert("Error: " + e.message); }
+  };
+
+  // --- RENDER ---
   if (loading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-gray-50 text-green-700">
         <Loader2 className="animate-spin mb-4" size={48} />
-        <p className="font-bold text-sm uppercase tracking-widest">Loading ...</p>
+        <p className="font-bold text-sm uppercase tracking-widest">Checking Permissions...</p>
       </div>
     );
   }
 
+  // LOGIN SCREEN (If no user)
+  if (!user) {
+    return <LoginPage onLogin={() => {}} />;
+  }
+
+  // --- ROUTING LOGIC (THE FIX) ---
+
+  // 1. ADMIN MODE
+  if (userData?.role === 'admin') {
+    
+    // A. Admin is Editing a User Invoice
+    if (adminEditingSession) {
+      return (
+        <div className="relative">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-red-600 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 font-bold cursor-pointer hover:bg-red-700 transition" onClick={() => setAdminEditingSession(null)}>
+             <ArrowLeft size={18}/> EXIT ADMIN EDIT MODE
+          </div>
+          <InvoiceGenerator 
+             onLogout={() => setAdminEditingSession(null)}
+             initialData={adminEditingSession.data} 
+             saveFinal={saveAdminEdit} 
+             saveDraft={async () => {}} 
+             fetchHistory={async () => []} 
+             deleteHistory={async () => {}}
+          />
+        </div>
+      );
+    }
+
+    // B. Admin Dashboard (Default Admin View)
+    return (
+      <AdminDashboard 
+        currentUser={user}
+        onLogout={() => signOut(auth)}
+        onEditInvoice={startAdminEdit}
+      />
+    );
+  }
+
+  // 2. REGULAR USER MODE (Explicit 'user' check is safer)
+  // If role is missing, we default to User for safety.
   return (
-    <div>
-      {user ? (
-        <InvoiceGenerator 
-          onLogout={() => signOut(auth)} 
-          saveDraft={saveDraftToCloud}      // Auto-save draft
-          saveFinal={saveFinalInvoice}      // Save button
-          fetchHistory={fetchSavedInvoices} // List button
-          deleteHistory={deleteInvoice}     // Delete button
-          initialData={initialData} 
-        />
-      ) : (
-        <LoginPage onLogin={() => {}} />
-      )}
-    </div>
+    <InvoiceGenerator 
+      onLogout={() => signOut(auth)} 
+      saveDraft={saveDraftToCloud}
+      saveFinal={saveFinalInvoice}
+      fetchHistory={fetchSavedInvoices}
+      deleteHistory={deleteInvoice}
+      initialData={initialData} 
+    />
   );
 }
 
