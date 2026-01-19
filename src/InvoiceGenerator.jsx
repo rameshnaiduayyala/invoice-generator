@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { Settings, Printer, Palette } from 'lucide-react';
+// 1. Import LogOut Icon
+import { Settings, Printer, Palette, LogOut } from 'lucide-react'; 
 import InvoiceHeader from './components/InvoiceHeader';
 import InvoiceTable from './components/InvoiceTable';
 import InvoiceFooter from './components/InvoiceFooter';
@@ -13,7 +14,8 @@ const DEFAULT_THEME = {
   headerText: '#111827',
 };
 
-const InvoiceGenerator = () => {
+// 2. Accept 'onLogout' prop here
+const InvoiceGenerator = ({ onLogout }) => {
   const [showSettings, setShowSettings] = useState(false);
   const invoiceRef = useRef();
 
@@ -35,8 +37,12 @@ const InvoiceGenerator = () => {
   const [signature, setSignature] = useState(() => localStorage.getItem('invoice_signature') || null);
   const [potOptions, setPotOptions] = useState(() => JSON.parse(localStorage.getItem('invoice_pot_options')) || ['4" Pot', '6" Pot', '8" Pot']);
   const [columns, setColumns] = useState(() => JSON.parse(localStorage.getItem('invoice_columns')) || [
-    { id: 'description', label: 'Plant Description', type: 'text' },
-    { id: 'size', label: 'Size/Pot', type: 'select' }
+    { id: 'description', label: 'Plant Name', type: 'text', width: 'w-4/12' },
+    { id: 'height', label: 'Height', type: 'text', width: 'w-1/12' }, 
+    { id: 'bag', label: 'Bag Size', type: 'text', width: 'w-2/12' }, 
+    { id: 'rate', label: 'Rate', type: 'number', width: 'w-2/12' },
+    { id: 'weight', label: 'Weight', type: 'text', width: 'w-1/12' }, 
+    { id: 'tonnage', label: 'Tonnage', type: 'text', width: 'w-1/12' } 
   ]);
   const [visibility, setVisibility] = useState(() => JSON.parse(localStorage.getItem('invoice_visibility')) || {
     logo: true, bankDetails: true, terms: true, signature: true, tax: true
@@ -49,8 +55,6 @@ const InvoiceGenerator = () => {
     number: 'INV-001', date: new Date().toISOString().split('T')[0], title: 'INVOICE'
   });
   const [items, setItems] = useState(() => JSON.parse(localStorage.getItem('invoice_items')) || [{ id: 1, qty: 1, price: 0 }]);
-  
-  // --- NEW STATE: EXTRA CHARGES ---
   const [extraCharges, setExtraCharges] = useState(() => JSON.parse(localStorage.getItem('invoice_extra_charges')) || []);
 
   // --- AUTO SAVE ---
@@ -65,16 +69,39 @@ const InvoiceGenerator = () => {
     localStorage.setItem('invoice_client', JSON.stringify(clientDetails));
     localStorage.setItem('invoice_meta', JSON.stringify(invoiceMeta));
     localStorage.setItem('invoice_items', JSON.stringify(items));
-    localStorage.setItem('invoice_extra_charges', JSON.stringify(extraCharges)); // Save Extras
+    localStorage.setItem('invoice_extra_charges', JSON.stringify(extraCharges));
   }, [theme, logoData, signature, potOptions, columns, visibility, companyDetails, clientDetails, invoiceMeta, items, extraCharges]);
 
   return (
     <div className="min-h-screen bg-gray-200 p-4 md:p-8 font-serif">
+      
+      {/* --- TOOLBAR --- */}
       <div className="max-w-[210mm] mx-auto mb-4 flex justify-between items-center print:hidden">
-        <span className="text-xs text-gray-500 font-sans flex items-center gap-2"><Palette size={14} style={{ color: theme.primary }}/> Professional Print Mode Active</span>
+        
+        {/* Left Side: Branding Indicator */}
+        <span className="text-xs text-gray-500 font-sans flex items-center gap-2">
+           <Palette size={14} style={{ color: theme.primary }}/> Design Mode
+        </span>
+
+        {/* Right Side: Action Buttons */}
         <div className="flex gap-3">
-          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 bg-white px-4 py-2 rounded shadow text-sm font-sans font-medium hover:bg-gray-50"><Settings size={16} /> Customize</button>
-          <button onClick={handlePrint} className="flex items-center gap-2 text-white px-4 py-2 rounded shadow text-sm font-sans font-medium hover:opacity-90 transition-opacity" style={{ backgroundColor: theme.primary }}><Printer size={16} /> Print PDF</button>
+          
+          {/* 3. LOGOUT BUTTON (Added Here) */}
+          <button 
+            onClick={onLogout} 
+            className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded shadow text-sm font-sans font-medium hover:bg-gray-700 transition"
+            title="Sign Out"
+          >
+            <LogOut size={16} /> Logout
+          </button>
+
+          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 bg-white px-4 py-2 rounded shadow text-sm font-sans font-medium hover:bg-gray-50 transition">
+            <Settings size={16} /> Customize
+          </button>
+          
+          <button onClick={handlePrint} className="flex items-center gap-2 text-white px-4 py-2 rounded shadow text-sm font-sans font-medium hover:opacity-90 transition-opacity" style={{ backgroundColor: theme.primary }}>
+            <Printer size={16} /> Print PDF
+          </button>
         </div>
       </div>
 
@@ -86,16 +113,14 @@ const InvoiceGenerator = () => {
           <div className="px-10 flex-1">
             <InvoiceTable columns={columns} items={items} setItems={setItems} potOptions={potOptions} theme={theme} />
           </div>
-          
-          {/* Pass extraCharges props here */}
           <InvoiceFooter 
             items={items}
             visibility={visibility}
             company={companyDetails} setCompany={setCompanyDetails}
             signature={signature} setSignature={setSignature}
             theme={theme}
-            extraCharges={extraCharges}       // <--- NEW
-            setExtraCharges={setExtraCharges} // <--- NEW
+            extraCharges={extraCharges}
+            setExtraCharges={setExtraCharges}
           />
         </div>
       </div>
