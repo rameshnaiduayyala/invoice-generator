@@ -121,6 +121,16 @@ function toWords(amount) {
 }
 
 // ─── MAIN APP ───────────────────────────────────────────────────────────────
+function getInvoicePageTitle(inv) {
+  const parts = [
+    inv.docType || "INVOICE",
+    inv.invoiceNo,
+    inv.client?.name || inv.company?.name,
+  ].filter(Boolean);
+
+  return parts.join(" - ");
+}
+
 export default function InvoiceApp() {
   const [inv, setInv] = useState(() => {
     try { const s = localStorage.getItem("invoice_app_v4"); return s ? JSON.parse(s) : INITIAL_STATE; }
@@ -138,6 +148,10 @@ export default function InvoiceApp() {
   useEffect(() => {
     try { localStorage.setItem("invoice_app_v4", JSON.stringify(inv)); } catch {}
   }, [inv]);
+
+  useEffect(() => {
+    document.title = getInvoicePageTitle(inv);
+  }, [inv.docType, inv.invoiceNo, inv.client?.name, inv.company?.name]);
 
   const upd = useCallback((patch) => setInv((p) => ({ ...p, ...patch })), []);
   const updCompany = (patch) => setInv((p) => ({ ...p, company: { ...p.company, ...patch } }));
@@ -195,7 +209,11 @@ export default function InvoiceApp() {
 
   const resetAll = () => { setInv(INITIAL_STATE); showToast("Reset to defaults"); };
   const newDoc   = () => { setInv({ ...INITIAL_STATE, invoiceNo: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`, invoiceDate: new Date().toISOString().split("T")[0] }); showToast("New document created"); };
-  const handlePrint = () => { setView("preview"); setTimeout(() => window.print(), 400); };
+  const handlePrint = () => {
+    document.title = getInvoicePageTitle(inv);
+    setView("preview");
+    setTimeout(() => window.print(), 400);
+  };
 
   const tabs = [
     { id: "details",  icon: "📋", label: "Details"  },
@@ -748,7 +766,7 @@ function InvoiceDocument({ inv, theme, sym, subtotal, extraTotal, discountAmt, g
       {/* FOOTER */}
       <div className="flex justify-between items-center px-8 py-2.5" style={{ background: theme.primary }}>
         <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>Thank you for your business!</span>
-        <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>Developed By Ramesh Ayyala • {new Date().getFullYear()}</span>
+        <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>Developed For {inv.company.name || "Nursery"} • {new Date().getFullYear()}</span>
       </div>
     </div>
   );
